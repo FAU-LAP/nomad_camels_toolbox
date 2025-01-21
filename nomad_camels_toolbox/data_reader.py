@@ -61,6 +61,7 @@ def read_camels_file(
     if return_dataframe:
         return pd.DataFrame(data)
     return data
+# TODO reading of variables, test with sub-sets
 
 
 def ask_for_selection(values):
