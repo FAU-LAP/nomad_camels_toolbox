@@ -133,8 +133,3 @@ def _ask_for_selection(values):
         )
         return _ask_for_selection(values)
     return val
-
-
-file = r"C:\Users\od93yces\NOMAD_CAMELS_data\user1\sample1\data_entry_113.nxs"
-data = read_camels_file(file, return_fits=True)
-print(data)
