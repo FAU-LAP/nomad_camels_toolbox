@@ -13,6 +13,7 @@ def read_camels_file(
     entry_key: str = "",
     data_set_key: str = "",
     return_dataframe: bool = PANDAS_INSTALLED,
+    read_variables: bool = True,
 ):
     """Reads a CAMELS file and returns a pandas DataFrame.
 
@@ -43,25 +44,38 @@ def read_camels_file(
         if data_set_key:
             if data_set_key not in f[key]["data"]:
                 print(
-                    f'The data set "{data_set_key}" you specified was not found in data.'
+                    f'The data set "{data_set_key}" you specified was not found in the data.'
                 )
-                groups = []
+                groups = ["main dataset"]
                 for group in f[key]["data"]:
                     if isinstance(f[key]["data"][group], h5py.Group):
                         groups.append(group)
-                data_set_key = ask_for_selection(groups)
-            data_set = f[key]["data"][data_set_key]
+                if len(groups) > 1:
+                    data_set_key = ask_for_selection(groups)
+                else:
+                    data_set_key = groups[0]
+            if data_set_key == "main dataset":
+                data_set = f[key]["data"]
+            else:
+                data_set = f[key]["data"][data_set_key]
         else:
             data_set = f[key]["data"]
         data = {}
         for key in data_set:
+            if (
+                read_variables
+                and isinstance(data_set[key], h5py.Group)
+                and key.endswith("_variable_signal")
+            ):
+                for sub_key in data_set[key]:
+                    data[sub_key] = data_set[key][sub_key][()]
+                continue
             if not isinstance(data_set[key], h5py.Dataset):
                 continue
             data[key] = data_set[key][()]
     if return_dataframe:
         return pd.DataFrame(data)
     return data
-# TODO reading of variables, test with sub-sets
 
 
 def ask_for_selection(values):
@@ -81,14 +95,12 @@ def ask_for_selection(values):
     for i, value in enumerate(values):
         print(f"[{i}]: {value}")
     try:
-        selection = int(input("Enter the number of your selection: "))
-    except ValueError:
-        print("Invalid input. Please enter a number.")
+        given_input = input("Enter the number of your selection: ")
+        selection = int(given_input)
+        val = values[selection]
+    except (ValueError, IndexError):
+        print(
+            f"Invalid input. Please enter one of the displayed numbers. (Your input: {given_input})"
+        )
         return ask_for_selection(values)
-    return values[selection]
-
-
-if __name__ == "__main__":
-    file_path = r"C:\Users\od93yces\NOMAD_CAMELS_data\user1\sample1\data_entry_106.nxs"
-    data = read_camels_file(file_path)
-    print(data)
+    return val

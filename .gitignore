@@ -1,0 +1,17 @@
+.idea/
+devices/devices_drivers/keithley_237/keithley_237/k237_visa_test.py
+**/__pycache__/
+__pycache__/
+.vscode/
+.desertenv
+docs/
+.python-version
+dist/
+*.egg-info
+/nomad_camels/test.py
+CAMELS.code-workspace
+**/config_path
+startup_packages.txt
+/.42c
+nomad_camels/api/api_testing.py
+.venv/
