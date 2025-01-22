@@ -10,17 +10,36 @@ except ImportError:
 
 def read_camels_file(
     file_path,
-    entry_key: str = "",
     data_set_key: str = "",
+    entry_key: str = "",
     return_dataframe: bool = PANDAS_INSTALLED,
     read_variables: bool = True,
+    return_fits: bool = False,
 ):
-    """Reads a CAMELS file and returns a pandas DataFrame.
+    """
+    Read data from a CAMELS file.
 
     Parameters
     ----------
     file_path : str
-        Path to the file to be read.
+        Path to the CAMELS file.
+    data_set_key : str, optional (default: "")
+        Key of the data set to read. If not specified, the main data set is read.
+    entry_key : str, optional (default: "")
+        Key of the entry to read. If not specified and there is more than one entry, the user is asked to select one.
+    return_dataframe : bool, optional (default: True)
+        Whether to return the data as a pandas DataFrame. Requires pandas to be installed if pandas is not installed, this parameter is ignored.
+    read_variables : bool, optional (default: True)
+        Whether to read the variables from the data set.
+    return_fits : bool, optional (default: False)
+        Whether to return the fits of the data set.
+
+    Returns
+    -------
+    data : dict or pd.DataFrame
+        The data from the data set.
+    fit_dict : dict
+        The fits of the data set, only returned if return_fits is True.
     """
     with h5py.File(file_path, "r") as f:
         keys = list(f.keys())
@@ -36,7 +55,7 @@ def read_camels_file(
                 if not key.startswith("NeXus_"):
                     remaining_keys.append(key)
             if len(remaining_keys) > 1:
-                key = ask_for_selection(remaining_keys)
+                key = _ask_for_selection(remaining_keys)
             else:
                 key = remaining_keys[0]
         else:
@@ -51,7 +70,7 @@ def read_camels_file(
                     if isinstance(f[key]["data"][group], h5py.Group):
                         groups.append(group)
                 if len(groups) > 1:
-                    data_set_key = ask_for_selection(groups)
+                    data_set_key = _ask_for_selection(groups)
                 else:
                     data_set_key = groups[0]
             if data_set_key == "main dataset":
@@ -73,12 +92,22 @@ def read_camels_file(
             if not isinstance(data_set[key], h5py.Dataset):
                 continue
             data[key] = data_set[key][()]
-    if return_dataframe:
+        fit_dict = {}
+        if return_fits and "fits" in data_set:
+            for fit_key in data_set["fits"]:
+                fit_dict[fit_key] = {}
+                for fit_val in data_set["fits"][fit_key]:
+                    fit_dict[fit_key][fit_val] = data_set["fits"][fit_key][fit_val][()]
+    if return_dataframe and PANDAS_INSTALLED:
+        if fit_dict:
+            return pd.DataFrame(data), fit_dict
         return pd.DataFrame(data)
+    if fit_dict:
+        return data, fit_dict
     return data
 
 
-def ask_for_selection(values):
+def _ask_for_selection(values):
     """Asks the user to select a value from a list of values.
 
     Parameters
@@ -102,5 +131,10 @@ def ask_for_selection(values):
         print(
             f"Invalid input. Please enter one of the displayed numbers. (Your input: {given_input})"
         )
-        return ask_for_selection(values)
+        return _ask_for_selection(values)
     return val
+
+
+file = r"C:\Users\od93yces\NOMAD_CAMELS_data\user1\sample1\data_entry_113.nxs"
+data = read_camels_file(file, return_fits=True)
+print(data)
