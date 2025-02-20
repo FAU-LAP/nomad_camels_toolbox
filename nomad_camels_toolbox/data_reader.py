@@ -1,4 +1,5 @@
 import h5py
+import numpy as np
 
 try:
     import pandas as pd
@@ -99,11 +100,54 @@ def read_camels_file(
                 for fit_val in data_set["fits"][fit_key]:
                     fit_dict[fit_key][fit_val] = data_set["fits"][fit_key][fit_val][()]
     if return_dataframe and PANDAS_INSTALLED:
-        if fit_dict:
-            return pd.DataFrame(data), fit_dict
-        return pd.DataFrame(data)
+        try:
+            try:
+                df = pd.DataFrame(data)
+            except ValueError:
+                data = _change_arrays_to_lists(data)
+                df = pd.DataFrame(data)
+                for col in df.columns:  # Convert lists back into arrays
+                    if isinstance(df[col].iloc[0], list):
+                        df[col] = df[col].apply(np.array)
+            if fit_dict:
+                try:
+                    fit_df = pd.DataFrame(fit_dict)
+                except ValueError:
+                    fit_dict = _change_arrays_to_lists(fit_dict)
+                    fit_df = pd.DataFrame(fit_dict)
+                    for col in fit_df.columns:  # Convert lists back into arrays
+                        if isinstance(fit_df[col].iloc[0], list):
+                            fit_df[col] = fit_df[col].apply(np.array)
+                return df, fit_df
+            return df
+        except Exception as e:
+            print(
+                "An error occurred while trying to convert the data to a pandas DataFrame. Returning the data as a dictionary instead."
+            )
+            print(e)
     if fit_dict:
         return data, fit_dict
+    return data
+
+
+def _change_arrays_to_lists(data):
+    """Changes arrays in a dictionary to lists. This is necessary for creating a pandas DataFrame from the data if the arrays have different shapes.
+
+    Parameters
+    ----------
+    data : dict
+        The data to change.
+
+    Returns
+    -------
+    dict
+        The data with arrays changed to lists.
+    """
+    for key, value in data.items():
+        if key.endswith("_variable_signal"):
+            data[key] = _change_arrays_to_lists(value)
+        elif isinstance(value, np.ndarray) and value.ndim > 1:
+            data[key] = value.tolist()
     return data
 
 
