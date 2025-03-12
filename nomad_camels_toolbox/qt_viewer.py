@@ -1,6 +1,7 @@
 import sys
 from importlib import resources
 
+import PySide6
 from PySide6 import QtWidgets, QtCore, QtGui
 from PySide6.QtCore import Qt
 
@@ -8,6 +9,8 @@ import pyqtgraph as pg
 
 from utils.exception_hook import exception_hook
 import graphics
+
+from data_reader import read_camels_file
 
 # these are the colors used by matplotlib, they are used as default colors in light mode
 matplotlib_default_colors = [
@@ -87,7 +90,7 @@ def set_theme(dark_mode=False):
     main_app.setStyle("Fusion")
 
 
-class DragDropGraphicsView(pg.GraphicsView):
+class DragDropGraphicLayoutWidget(pg.GraphicsLayoutWidget):
     dropped = QtCore.Signal(list)
 
     def __init__(self, parent=None):
@@ -127,27 +130,93 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         self.setWindowIcon(
             QtGui.QIcon(str(resources.files(graphics) / "CAMELS_icon.png"))
         )
-        self.graphics_view = DragDropGraphicsView()
+        self.graphics_view = DragDropGraphicLayoutWidget()
+        self.graphics_view.dropped.connect(self.load_data)
         self.left_widget = QtWidgets.QWidget()
         layout = QtWidgets.QGridLayout()
         self.left_widget.setLayout(layout)
-        main_layout = QtWidgets.QHBoxLayout()
-        self.setLayout(main_layout)
-        main_layout.addWidget(self.left_widget)
-        main_layout.addWidget(self.graphics_view)
-        self.setCentralWidget(QtWidgets.QWidget())
-        self.centralWidget().setLayout(main_layout)
+        # main_layout = QtWidgets.QHBoxLayout()
+        # self.setLayout(main_layout)
+        self.setCentralWidget(QtWidgets.QSplitter())
+        self.centralWidget().addWidget(self.left_widget)
+        self.centralWidget().addWidget(self.graphics_view)
+        # self.centralWidget().setLayout(main_layout)
+
+        self.histogram = pg.HistogramLUTItem()
+        self.image_plot = self.graphics_view.addPlot()
+        self.graphics_view.addItem(self.histogram)
+        self.histogram.autoHistogramRange()
+        self.graphics_view.nextRow()
+        self.roi_plot = self.graphics_view.addPlot()
+        self.roi_plot.hide()
+        self.graphics_view.nextRow()
+        self.roi_intensity_plot = self.graphics_view.addPlot()
+        self.roi_intensity_plot.hide()
 
         self.load_measurement_button = QtWidgets.QPushButton("Load Measurement")
         self.load_measurement_button.clicked.connect(self.load_measurement)
         layout.addWidget(self.load_measurement_button, 0, 0)
+
+        self.plot_table = QtWidgets.QTableWidget()
+        labels = [
+            "plot?",
+            "X",
+            "Y",
+            "color",
+            "symbol",
+            "linestyle",
+            "file",
+            "file-entry",
+        ]
+        self.plot_table.setColumnCount(len(labels))
+        self.plot_table.setHorizontalHeaderLabels(labels)
+        self.plot_table.verticalHeader().hide()
+        self.plot_table.resizeColumnsToContents()
+
+        layout.addWidget(self.plot_table, 1, 0)
+
+        self.data = {}
+
+        self.adjustSize()
+
+    def add_table_row(self, data, fname="", entry_name=""):
+        row = self.plot_table.rowCount()
+        self.plot_table.setRowCount(row + 1)
+        self.plot_table.setItem(row, 0, QtWidgets.QTableWidgetItem())
+        self.plot_table.item(row, 0).setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+        self.plot_table.item(row, 0).setCheckState(Qt.Checked)
+        data_keys = list(data.keys())
+        box = QtWidgets.QComboBox()
+        box.addItems(data_keys)
+        self.plot_table.setCellWidget(row, 1, box)
+        box = QtWidgets.QComboBox()
+        box.addItems(data_keys)
+        self.plot_table.setCellWidget(row, 2, box)
+        box = QtWidgets.QComboBox()
+        box.addItems(matplotlib_default_colors)
+        self.plot_table.setCellWidget(row, 3, box)
+        box = QtWidgets.QComboBox()
+        box.addItems(list(symbols.keys()))
+        self.plot_table.setCellWidget(row, 4, box)
+        box = QtWidgets.QComboBox()
+        box.addItems(list(linestyles.keys()))
+        self.plot_table.setCellWidget(row, 5, box)
+        self.plot_table.setItem(row, 6, QtWidgets.QTableWidgetItem(fname))
+        self.plot_table.setItem(row, 7, QtWidgets.QTableWidgetItem(entry_name))
+        self.plot_table.resizeColumnsToContents()
 
     def load_measurement(self):
         file_dialog = QtWidgets.QFileDialog()
         file_dialog.setFileMode(QtWidgets.QFileDialog.ExistingFiles)
         if file_dialog.exec():
             file_paths = file_dialog.selectedFiles()
-            print(file_paths)
+            self.load_data(file_paths)
+
+    def load_data(self, file_paths):
+        for file_path in file_paths:
+            data = read_camels_file(file_path)
+            self.data[file_path] = data
+            self.add_table_row(data=data, fname=file_path)
 
 
 def run_viewer():
