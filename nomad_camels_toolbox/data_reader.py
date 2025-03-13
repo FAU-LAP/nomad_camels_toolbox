@@ -16,6 +16,7 @@ def read_camels_file(
     return_dataframe: bool = PANDAS_INSTALLED,
     read_variables: bool = True,
     return_fits: bool = False,
+    read_all_datasets: bool = False,
 ):
     """
     Read data from a CAMELS file.
@@ -27,13 +28,15 @@ def read_camels_file(
     data_set_key : str, optional (default: "")
         Key of the data set to read. If not specified, the main data set is read.
     entry_key : str, optional (default: "")
-        Key of the entry to read. If not specified and there is more than one entry, the user is asked to select one.
+        Entry-Key to read. If not specified and there is more than one entry, the user is asked to select one. Usually files only have one entry "CAMELS_entry", i.e. this is not needed.
     return_dataframe : bool, optional (default: True)
         Whether to return the data as a pandas DataFrame. Requires pandas to be installed if pandas is not installed, this parameter is ignored.
     read_variables : bool, optional (default: True)
         Whether to read the variables from the data set.
     return_fits : bool, optional (default: False)
         Whether to return the fits of the data set.
+    read_all_datasets : bool, optional (default: False)
+        Whether to read all datasets in the file. If True, the data_set_key parameter is ignored. If True, a dictionary with the data sets is returned.
 
     Returns
     -------
@@ -61,6 +64,21 @@ def read_camels_file(
                 key = remaining_keys[0]
         else:
             key = keys[0]
+        if read_all_datasets:
+            data = {}
+            groups = ["main dataset"]
+            for group in f[key]["data"]:
+                if isinstance(f[key]["data"][group], h5py.Group) and group != "fits":
+                    groups.append(group)
+            for data_set_key in groups:
+                data[data_set_key] = _read_dataset(
+                    f[key]["data"],
+                    data_set_key,
+                    return_dataframe=return_dataframe,
+                    read_variables=read_variables,
+                    return_fits=return_fits,
+                )
+            return data
         if data_set_key:
             if data_set_key not in f[key]["data"]:
                 print(
@@ -68,37 +86,56 @@ def read_camels_file(
                 )
                 groups = ["main dataset"]
                 for group in f[key]["data"]:
-                    if isinstance(f[key]["data"][group], h5py.Group):
+                    if (
+                        isinstance(f[key]["data"][group], h5py.Group)
+                        and group != "fits"
+                    ):
                         groups.append(group)
                 if len(groups) > 1:
                     data_set_key = _ask_for_selection(groups)
                 else:
                     data_set_key = groups[0]
-            if data_set_key == "main dataset":
-                data_set = f[key]["data"]
-            else:
-                data_set = f[key]["data"][data_set_key]
         else:
-            data_set = f[key]["data"]
-        data = {}
-        for key in data_set:
-            if (
-                read_variables
-                and isinstance(data_set[key], h5py.Group)
-                and key.endswith("_variable_signal")
-            ):
-                for sub_key in data_set[key]:
-                    data[sub_key] = data_set[key][sub_key][()]
-                continue
-            if not isinstance(data_set[key], h5py.Dataset):
-                continue
-            data[key] = data_set[key][()]
-        fit_dict = {}
-        if return_fits and "fits" in data_set:
-            for fit_key in data_set["fits"]:
-                fit_dict[fit_key] = {}
-                for fit_val in data_set["fits"][fit_key]:
-                    fit_dict[fit_key][fit_val] = data_set["fits"][fit_key][fit_val][()]
+            data_set_key = "main dataset"
+        return _read_dataset(
+            f[key]["data"],
+            data_set_key,
+            return_dataframe=return_dataframe,
+            read_variables=read_variables,
+            return_fits=return_fits,
+        )
+
+
+def _read_dataset(
+    data_group,
+    dataset_name,
+    return_dataframe: bool = PANDAS_INSTALLED,
+    read_variables: bool = True,
+    return_fits: bool = False,
+):
+    if dataset_name == "main dataset":
+        data_set = data_group
+    else:
+        data_set = data_group[dataset_name]
+    data = {}
+    for key in data_set:
+        if (
+            read_variables
+            and isinstance(data_set[key], h5py.Group)
+            and key.endswith("_variable_signal")
+        ):
+            for sub_key in data_set[key]:
+                data[sub_key] = data_set[key][sub_key][()]
+            continue
+        if not isinstance(data_set[key], h5py.Dataset):
+            continue
+        data[key] = data_set[key][()]
+    fit_dict = {}
+    if return_fits and "fits" in data_set:
+        for fit_key in data_set["fits"]:
+            fit_dict[fit_key] = {}
+            for fit_val in data_set["fits"][fit_key]:
+                fit_dict[fit_key][fit_val] = data_set["fits"][fit_key][fit_val][()]
     if return_dataframe and PANDAS_INSTALLED:
         try:
             try:
