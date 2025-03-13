@@ -5,6 +5,7 @@ import PySide6
 from PySide6 import QtWidgets, QtCore, QtGui
 from PySide6.QtCore import Qt
 import h5py
+import numpy as np
 
 import pyqtgraph as pg
 
@@ -178,13 +179,37 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         self.plot_table.setHorizontalHeaderLabels(labels)
         self.plot_table.verticalHeader().hide()
         self.plot_table.resizeColumnsToContents()
+        self.plot_table.clicked.connect(self.check_change)
+
+        self.multi_selection_widget = QtWidgets.QWidget()
 
         layout.addWidget(self.plot_table, 1, 0)
+        layout.addWidget(self.multi_selection_widget, 2, 0)
+        self.options_layout = layout
 
         self.data = {}
         self.plot_items = []
 
         self.adjustSize()
+
+    def check_change(self, index):
+        c = index.column()
+        if c == 0:
+            self._add_or_change_plot_data(index.row())
+        self.make_multi_selection_widget(index.row())
+
+    def make_multi_selection_widget(self, number):
+        x_selection = self.plot_table.cellWidget(number, 1).currentText()
+        y_selection = self.plot_table.cellWidget(number, 2).currentText()
+        data = self.data[
+            f"{self.plot_table.item(number, 7).text()}_{self.plot_table.item(number, 8).text()}"
+        ][self.plot_table.cellWidget(number, 3).currentText()]
+        widget = Multi_Selection_Widget(
+            data, x_selection=x_selection, y_selection=y_selection
+        )
+        self.options_layout.replaceWidget(self.multi_selection_widget, widget)
+        self.multi_selection_widget.deleteLater()
+        self.multi_selection_widget = widget
 
     def add_table_row(self, data, fname="", entry_name=""):
         row = self.plot_table.rowCount()
@@ -221,6 +246,7 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         self.plot_table.setCellWidget(row, 4, box)
         box = QtWidgets.QComboBox()
         box.addItems(list(symbols.keys()))
+        box.setCurrentText("none")
         box.currentTextChanged.connect(
             lambda text=None, x=row: self._add_or_change_plot_data(x)
         )
@@ -276,7 +302,9 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
                         key = remaining_keys[0]
                 else:
                     key = keys[0]
-            data = read_camels_file(file_path, entry_key=key, read_all_datasets=True)
+            data = read_camels_file(
+                file_path, entry_key=key, read_all_datasets=True, return_dataframe=False
+            )
             self.data[f"{file_path}_{key}"] = data
             self.add_table_row(data=data, fname=file_path, entry_name=key)
         self.update_plot()
@@ -308,15 +336,20 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
             y = data[y_data]
         except KeyError:
             return
-        if PANDAS_INSTALLED:
-            x = x.to_numpy()
-            y = y.to_numpy()
+        try:
+            x = x.astype(float)
+            y = y.astype(float)
+        except ValueError:
+            print("Could not convert data to float.")
+            return
         if number >= len(self.plot_items):
-            item = pg.PlotCurveItem(
+            item = pg.PlotDataItem(
                 x,
                 y,
                 pen=pg.mkPen(
-                    color, width=2, symbol=symbols[symbol], style=linestyles[linestyle]
+                    color,
+                    width=2,
+                    style=linestyles[linestyle],
                 ),
             )
             self.image_plot.addItem(item)
@@ -326,9 +359,45 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
             item.setData(x, y)
             item.setPen(
                 pg.mkPen(
-                    color, width=2, symbol=symbols[symbol], style=linestyles[linestyle]
+                    color,
+                    width=2,
+                    style=linestyles[linestyle],
                 )
             )
+        item.setSymbol(symbols[symbol])
+        item.setSymbolBrush(pg.mkBrush(color))
+        item.setSymbolPen(pg.mkPen(color))
+        do_plot = self.plot_table.item(number, 0).checkState()
+        if do_plot == Qt.Checked:
+            item.show()
+        else:
+            item.hide()
+        self.make_multi_selection_widget(number)
+
+
+class Multi_Selection_Widget(QtWidgets.QWidget):
+    def __init__(self, data, parent=None, x_selection=None, y_selection=None):
+        super().__init__(parent)
+        layout = QtWidgets.QGridLayout()
+        self.data = data
+        self.setLayout(layout)
+        self.x_selection = x_selection
+        self.y_selection = y_selection
+
+        self.x_image_box = QtWidgets.QComboBox()
+        self.y_image_box = QtWidgets.QComboBox()
+
+        self.keys = list(data.keys())
+        self.keys.remove(self.x_selection)
+        if self.x_selection != self.y_selection:
+            self.keys.remove(self.y_selection)
+        self.x_image_box.addItems(self.keys)
+        self.y_image_box.addItems(self.keys)
+
+        layout.addWidget(QtWidgets.QLabel("X:"), 0, 0)
+        layout.addWidget(self.x_image_box, 0, 1)
+        layout.addWidget(QtWidgets.QLabel("Y:"), 1, 0)
+        layout.addWidget(self.y_image_box, 1, 1)
 
 
 def ask_for_input_box(values):
