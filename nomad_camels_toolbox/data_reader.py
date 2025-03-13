@@ -27,7 +27,7 @@ def read_camels_file(
     data_set_key : str, optional (default: "")
         Key of the data set to read. If not specified, the main data set is read.
     entry_key : str, optional (default: "")
-        Key of the entry to read. If not specified and there is more than one entry, the user is asked to select one.
+        Entry-Key to read. If not specified and there is more than one entry, the user is asked to select one. Usually files only have one entry "CAMELS_entry", i.e. this is not needed.
     return_dataframe : bool, optional (default: True)
         Whether to return the data as a pandas DataFrame. Requires pandas to be installed if pandas is not installed, this parameter is ignored.
     read_variables : bool, optional (default: True)
