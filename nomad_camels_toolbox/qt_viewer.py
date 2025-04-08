@@ -530,6 +530,15 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
                     print(e)
                     pass
                 sorted_data = sorted_data[sorted_data[key] == filter_val]
+        # if no data is left after filtering, return
+        if sorted_data.empty:
+            self.image_info_text.setText(
+                "No data left after filtering.\nCheck your filters!"
+            )
+            self.image_info_text.show()
+            self.image_plot.show()
+            self.roi_intensity_plot.hide()
+            return False
         x_data = sorted_data[x_name]
         y_data = sorted_data[y_name]
         x_ax_data = sorted_data[x_ax]
