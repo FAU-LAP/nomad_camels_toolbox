@@ -197,6 +197,10 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         self.roi_intensity_plot = self.graphics_view.addPlot()
         self.roi_intensity_plot.hide()
 
+        self.pos_line_1d = pg.InfiniteLine(pos=0, pen="r", movable=True)
+        self.pos_line_1d.sigPositionChanged.connect(self._pos_line_moved)
+        self.roi_intensity_plot.addItem(self.pos_line_1d)
+
         self.load_measurement_button = QtWidgets.QPushButton("Load Measurement")
         self.load_measurement_button.clicked.connect(self.load_measurement)
         layout.addWidget(self.load_measurement_button, 0, 0)
@@ -413,6 +417,8 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         except ValueError:
             print("Could not convert data to float.")
             return
+        self.intensity_line_lo.sigPositionChanged.disconnect()
+        self.intensity_line_hi.sigPositionChanged.disconnect()
         self.intensity_line_lo.setValue(x.min())
         self.intensity_line_hi.setValue(x.max())
         if x.ndim == 1 and y.ndim == 1:
@@ -446,21 +452,37 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
                 item.show()
             else:
                 item.hide()
+            self.xy_plot.autoRange()
+            self.image_plot.hide()
+            self.roi_intensity_plot.hide()
         elif x.ndim == 2 and y.ndim == 2:
             self.make_multi_selection_widget(number)
             self.image_plot.show()
             self.image_plot.setTitle(f"integrated intensity {y_data}")
-            self.update_image(number)
+        else:
+            print("Could not plot data, please check the data shapes.")
+            return
+
+    def update_intensity_line(self):
+        self.image_plot.hide()
+        self.histogram.hide()
 
     def update_image(self, number):
         if not self._update_intensities(number):
             return
+        self.intensity_line_hi.sigPositionChanged.disconnect()
+        self.intensity_line_lo.sigPositionChanged.disconnect()
         self.intensity_line_lo.sigPositionChanged.connect(
             lambda stat=None, val=number: self._update_intensities(val)
         )
         self.intensity_line_hi.sigPositionChanged.connect(
             lambda stat=None, val=number: self._update_intensities(val)
         )
+        self._current_image_number = number
+        y_name = self.multi_selection_widget.y_image_box.currentText()
+        if y_name == "None":
+            self.update_intensity_line()
+            return
 
         # self.image.setImage(np.array([[0, 1], [2, 3]]), levels=[0, 3])
         self.image.show()
@@ -469,7 +491,6 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         self.histogram.show()
         self.image_plot.autoRange()
         self.image_ROI.setPos((0, 0))
-        self._current_image_number = number
         self._image_roi_moved()
 
     def _update_intensities(self, number):
@@ -479,12 +500,16 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         x_ax = self.multi_selection_widget.x_image_box.currentText()
         y_ax = self.multi_selection_widget.y_image_box.currentText()
         self.image.clear()
+        self.roi_intensity_plot.clear()
         if x_ax == y_ax:
             self.image_info_text.setText("Select different axes for the image.")
             self.image_info_text.show()
             return False
         try:
-            sorted_data = data.sort_values([x_ax, y_ax])
+            if y_ax == "None":
+                sorted_data = data.sort_values([x_ax])
+            else:
+                sorted_data = data.sort_values([x_ax, y_ax])
         except Exception:
             self.image_info_text.setText(
                 "Could not make an image of the axes,\nplease check the data and your selection."
@@ -494,7 +519,10 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         x_data = sorted_data[x_name]
         y_data = sorted_data[y_name]
         x_ax_data = sorted_data[x_ax]
-        y_ax_data = sorted_data[y_ax]
+        if y_ax != "None":
+            y_ax_data = sorted_data[y_ax]
+        else:
+            y_ax_data = np.zeros((1))
         if x_ax_data.ndim != 1 or y_ax_data.ndim != 1:
             self.image_info_text.setText("Please select 1D data for x and y axes.")
             self.image_info_text.show()
@@ -517,8 +545,8 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
             intensities.append(val)
         intensities = np.array(intensities)
         try:
-            self.image_x_values = sorted(list(set(data[x_ax])))
-            self.image_y_values = sorted(list(set(data[y_ax])))
+            self.image_x_values = sorted(list(set(x_ax_data)))
+            self.image_y_values = sorted(list(set(y_ax_data)))
             xlen = len(self.image_x_values)
             ylen = len(self.image_y_values)
             self.image_data = np.reshape(intensities, (xlen, ylen))
@@ -532,16 +560,55 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
 
         self.sorted_data = sorted_data
         self.image_info_text.hide()
-
-        self.image.setImage(
-            self.image_data, levels=[np.min(intensities), np.max(intensities)]
-        )
+        if ylen > 1:
+            self.image.setImage(
+                self.image_data, levels=[np.min(intensities), np.max(intensities)]
+            )
+        else:
+            try:
+                self.roi_intensity_plot.plot(
+                    x_ax_data, intensities, pen=pg.mkPen(width=2), symbol="o"
+                )
+                self.roi_intensity_plot.show()
+                self.roi_intensity_plot.autoRange()
+                self.roi_intensity_plot.addItem(self.pos_line_1d)
+            except Exception as e:
+                print(e)
+                self.image_info_text.setText(f"Error: {e}")
+                self.image_info_text.show()
+                return False
         return True
+
+    def _pos_line_moved(self):
+        x = self.pos_line_1d.value()
+        if min(self.image_x_values) <= x <= max(self.image_x_values):
+            self.last_x = x
+        else:
+            self.pos_line_1d.setValue(self.last_x)
+            return
+        closest_x = np.abs(np.array(self.image_x_values) - x).argmin()
+        xpos = self.image_x_values[closest_x]
+        x_ax_name = self.multi_selection_widget.x_image_box.currentText()
+        x_text = f"{x_ax_name} = {xpos}"
+        self.image_xlabel.setText(x_text)
+        self.image_ylabel.setText("")
+
+        x_name = self.plot_table.cellWidget(self._current_image_number, 1).currentText()
+        y_name = self.plot_table.cellWidget(self._current_image_number, 2).currentText()
+        x_data = self.sorted_data[x_name][self.sorted_data[x_ax_name] == xpos]
+        y_data = self.sorted_data[y_name][self.sorted_data[x_ax_name] == xpos]
+        try:
+            x_data = x_data.to_numpy()[0]
+            y_data = y_data.to_numpy()[0]
+        except Exception:
+            pass
+        self.xy_plot.clear()
+        self.xy_plot.plot(x_data, y_data)
+        self.xy_plot.addItem(self.intensity_line_lo)
+        self.xy_plot.addItem(self.intensity_line_hi)
 
     def _image_roi_moved(self):
         x, y = [int(val) for val in self.image_ROI.pos()]
-        x_ax = self.multi_selection_widget.x_image_box.currentText()
-        y_ax = self.multi_selection_widget.y_image_box.currentText()
         if 0 <= x < len(self.image_x_values) and 0 <= y < len(self.image_y_values):
             self.last_x = x
             self.last_y = y
@@ -550,20 +617,22 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
             return
         xpos = self.image_x_values[x]
         ypos = self.image_y_values[y]
-        xname = self.multi_selection_widget.x_image_box.currentText()
-        yname = self.multi_selection_widget.y_image_box.currentText()
-        x_text = f"{xname} = {xpos}"
-        y_text = f"{yname} = {ypos}"
+        x_ax_name = self.multi_selection_widget.x_image_box.currentText()
+        y_ax_name = self.multi_selection_widget.y_image_box.currentText()
+        x_text = f"{x_ax_name} = {xpos}"
+        y_text = f"{y_ax_name} = {ypos}"
         self.image_xlabel.setText(x_text)
         self.image_ylabel.setText(y_text)
 
         x_name = self.plot_table.cellWidget(self._current_image_number, 1).currentText()
         y_name = self.plot_table.cellWidget(self._current_image_number, 2).currentText()
         x_data = self.sorted_data[x_name][
-            (self.sorted_data[x_ax] == xpos) & (self.sorted_data[y_ax] == ypos)
+            (self.sorted_data[x_ax_name] == xpos)
+            & (self.sorted_data[y_ax_name] == ypos)
         ]
         y_data = self.sorted_data[y_name][
-            (self.sorted_data[x_ax] == xpos) & (self.sorted_data[y_ax] == ypos)
+            (self.sorted_data[x_ax_name] == xpos)
+            & (self.sorted_data[y_ax_name] == ypos)
         ]
         try:
             x_data = x_data.to_numpy()[0]
@@ -597,7 +666,7 @@ class Multi_Selection_Widget(QtWidgets.QWidget):
         if self.x_selection != self.y_selection:
             self.keys.remove(self.y_selection)
         self.x_image_box.addItems(self.keys)
-        self.y_image_box.addItems(self.keys)
+        self.y_image_box.addItems(["None"] + self.keys)
         self.x_image_box.currentTextChanged.connect(
             lambda text=None: self.x_selection_signal.emit(
                 self.x_image_box.currentText()
@@ -658,7 +727,7 @@ def ask_for_input_box(values):
 
 def run_viewer():
     app = QtWidgets.QApplication([])
-    # set_theme()
+    set_theme()
     sys.excepthook = exception_hook
     window = CAMELS_Viewer()
     window.show()
