@@ -251,7 +251,10 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         # Button to load measurement files via a file dialog.
         self.load_measurement_button = QtWidgets.QPushButton("Load Measurement")
         self.load_measurement_button.clicked.connect(self.load_measurement)
-        layout.addWidget(self.load_measurement_button, 0, 0)
+
+        self.dark_mode_box = QtWidgets.QCheckBox("Dark Mode")
+        self.dark_mode_box.setChecked(False)
+        self.dark_mode_box.stateChanged.connect(self._dark_mode_toggle)
 
         # Create a table widget to list and manage multiple plots.
         self.plot_table = QtWidgets.QTableWidget()
@@ -286,6 +289,8 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         self.last_y = 0
 
         # Add widgets to the left-side layout.
+        layout.addWidget(self.load_measurement_button, 0, 0)
+        layout.addWidget(self.dark_mode_box, 0, 1)
         layout.addWidget(self.plot_table, 1, 0, 1, 2)
         layout.addWidget(self.image_xlabel, 2, 0)
         layout.addWidget(self.image_ylabel, 2, 1)
@@ -304,6 +309,35 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
             raise Exception(
                 "Pandas is not installed. Please install pandas to use all functionality"
             )
+
+    def _dark_mode_toggle(self, state):
+        """
+        Toggle the dark mode of the application.
+
+        Parameters:
+            state (bool): If True, enable dark mode. Otherwise, disable it.
+        """
+        if state:
+            set_theme(True)
+            bg = "k"
+            fg = "w"
+        else:
+            set_theme(False)
+            bg = "w"
+            fg = "k"
+        self.graphics_view.setBackground(bg)
+        for plot in [
+            self.xy_plot,
+            self.image_plot,
+            self.roi_intensity_plot,
+        ]:
+            for axis in ["left", "bottom", "right", "top"]:
+                ax = plot.getAxis(axis)
+                ax.setPen(pg.mkPen(fg))
+                ax.setTextPen(pg.mkPen(fg))
+        # change text color of histogram
+        self.histogram.axis.setPen(pg.mkPen(fg))
+        self.histogram.axis.setTextPen(pg.mkPen(fg))
 
     def check_change(self, index):
         """
@@ -587,6 +621,7 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
             self.xy_plot.autoRange()
             self.image_plot.hide()
             self.roi_intensity_plot.hide()
+            self.multi_selection_widget.hide()
         elif x.ndim == 2 and y.ndim == 2:
             # 2D plot (integrated image) requires the multi-selection widget.
             self.make_multi_selection_widget(number)
