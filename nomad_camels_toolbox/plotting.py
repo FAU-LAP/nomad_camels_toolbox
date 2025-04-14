@@ -11,6 +11,23 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
+def _recursive_plots_from_sub_protocol_dict(own_name, protocol_info):
+    plot_info = {}
+    primary_plots = protocol_info["plots"]
+    if primary_plots:
+        plot_info[own_name] = primary_plots
+    for step, step_info in protocol_info["loop_step_dict"].items():
+        if "plots" in step_info:
+            plot_info[step_info["name"]] = step_info["plots"]
+        elif "_sub_protocol_dict" in step_info:
+            plot_info.update(
+                _recursive_plots_from_sub_protocol_dict(
+                    step_info["name"], step_info["_sub_protocol_dict"]
+                )
+            )
+    return plot_info
+
+
 def recreate_plots(
     file_path, entry_key: str = "", data_set_key: str = "", show_figures=True
 ):
@@ -18,14 +35,10 @@ def recreate_plots(
         key = decide_entry_key(f, entry_key)
         protocol_json = f[key]["measurement_details/protocol_json"][()].decode("utf-8")
     protocol_info = json.loads(protocol_json)
-    primary_plots = protocol_info["plots"]
-    plot_info = {"primary": primary_plots}
-    for step, step_info in protocol_info["loop_step_dict"].items():
-        if "plots" in step_info:
-            plot_info[step_info["name"]] = step_info["plots"]
+    plot_info = _recursive_plots_from_sub_protocol_dict("primary", protocol_info)
     if not plot_info:
         print(
-            "No plot info found in the file.\nIt might be that no plots were defined for the measurement."
+            "No plot info found in the file.\nIt might be that no plots were defined for the measurement.\nCaveat: Plots for subprotocol only work from CAMELS version 1.8.3 onwards."
         )
         return None
     if not data_set_key:
@@ -43,7 +56,7 @@ def recreate_plots(
         if stream not in data:
             warnings.warn(
                 f'The stream "{stream}" you specified was not found in the data.\n'
-                "Please check the available streams in the file."
+                "Check the available streams in the file."
             )
         df = data[stream][0]
         fit_data = data[stream][1]
@@ -275,9 +288,3 @@ def _evaluate_string(string, df):
     namespace = dict(base_namespace)
     namespace.update(df.to_dict(orient="series"))
     return eval(string, {}, namespace)
-
-
-if __name__ == "__main__":
-    file_path = r"C:\Users\od93yces\NOMAD_CAMELS_data\user1\sample1\data_entry_42.h5"
-    # file_path = r"C:\Users\od93yces\NOMAD_CAMELS_data\user1\sample1\data_entry_38.h5"
-    recreate_plots(file_path)
