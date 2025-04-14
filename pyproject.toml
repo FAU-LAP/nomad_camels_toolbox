@@ -1,6 +1,6 @@
 [project]
 name = "nomad-camels-toolbox"
-version = "0.1.2"
+version = "0.2.0"
 description = "This package provides easy access to data generated with nomad-camels"
 authors = [
     {name = "nomad-camels team",email = "nomad-camels@fau.de"}
