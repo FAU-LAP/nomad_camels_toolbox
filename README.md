@@ -7,6 +7,11 @@ Simplify your data evaluation with the NOMAD CAMELS toolbox!
 
 # Changelog
 
+## 0.2.0
+Features:
+- Recreating plots from CAMELS with a single function
+- UI tool to view data in a simplified way
+
 ### 0.1.2
 Fixes:
 - fixed returning of dataframes for different shapes of the data
