@@ -1,10 +1,10 @@
 from data_reader import read_camels_file, decide_entry_key
 from utils.fit_variable_renaming import replace_name
+from utils.string_evaluation import evaluate_string
 import h5py
 import json
 import lmfit
 import numpy as np
-import scipy.constants as const
 import warnings
 
 import plotly.graph_objects as go
@@ -120,14 +120,14 @@ def recreate_plots(
                 if x_name in df:
                     x_data = df[x_name]
                 else:
-                    x_data = _evaluate_string(x_name, df)
+                    x_data = evaluate_string(x_name, df)
                 # Loop over each y value to add them as separate traces.
                 for i, y_name in enumerate(y_names):
                     y_axis = y_axes[i]
                     if y_name in df:
                         y_data = df[y_name]
                     else:
-                        y_data = _evaluate_string(y_name, df)
+                        y_data = evaluate_string(y_name, df)
                     fig.add_trace(
                         go.Scatter(x=x_data, y=y_data, mode="lines", name=y_name),
                         secondary_y=y_axis == "right",
@@ -162,15 +162,15 @@ def recreate_plots(
                 if plot["x_axis"] in df:
                     x_data = df[plot["x_axis"]]
                 else:
-                    x_data = _evaluate_string(plot["x_axis"], df)
+                    x_data = evaluate_string(plot["x_axis"], df)
                 if plot["y_axes"]["formula"][0] in df:
                     y_data = df[plot["y_axes"]["formula"][0]]
                 else:
-                    y_data = _evaluate_string(plot["y_axes"]["formula"][0], df)
+                    y_data = evaluate_string(plot["y_axes"]["formula"][0], df)
                 if plot["z_axis"] in df:
                     z_data = df[plot["z_axis"]]
                 else:
-                    z_data = _evaluate_string(plot["z_axis"], df)
+                    z_data = evaluate_string(plot["z_axis"], df)
                 # Create a colormesh (or a heatmap) from the x, y and z data.
                 mesh = _make_colormesh(x_data, y_data, z_data)
                 if mesh:
@@ -304,7 +304,7 @@ def _make_single_fit(func, y, x, stream, params, model, df, fit_data, y_axis, fi
         if x in df:
             x_data = df[x].values
         else:
-            x_data = _evaluate_string(x, df).values
+            x_data = evaluate_string(x, df).values
         if len(x_data) < 100:
             x_data = np.linspace(x_data.min(), x_data.max(), 100)
         y_data = model.eval(params=params, x=x_data)
@@ -322,31 +322,3 @@ def _make_single_fit(func, y, x, stream, params, model, df, fit_data, y_axis, fi
             f"Could not plot the fit {func} for {y} vs {x}.\n"
             f"Please check the fit parameters and the data.\n{e}"
         )
-
-
-# Create a base namespace with common modules and constants
-base_namespace = {"numpy": np, "np": np, "time": 0, "const": const}
-# Add all numpy functions to the base namespace
-base_namespace.update({name: getattr(np, name) for name in np.__all__})
-
-
-def _evaluate_string(string, df):
-    """Evaluates a string expression using the variables in the DataFrame.
-
-    Parameters
-    ----------
-    string : str
-        The string to evaluate.
-    df : pandas.DataFrame
-        The DataFrame containing the variables.
-
-    Returns
-    -------
-    float or str
-        The evaluated value or an error message.
-    """
-    string = string.strip()
-    # Create a namespace that includes common modules/constants and the DataFrame's series.
-    namespace = dict(base_namespace)
-    namespace.update(df.to_dict(orient="series"))
-    return eval(string, {}, namespace)

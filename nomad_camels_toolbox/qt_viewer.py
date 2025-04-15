@@ -20,9 +20,14 @@ import copy
 import pyqtgraph as pg
 
 from utils.exception_hook import exception_hook
+from utils.string_evaluation import evaluate_string
 import graphics
 
 from data_reader import read_camels_file, PANDAS_INSTALLED
+
+
+dark_mode = False
+
 
 # these are the colors used by matplotlib, they are used as default colors in light mode
 matplotlib_default_colors = {
@@ -96,13 +101,16 @@ bolder_font.setBold(True)
 bolder_font.setPointSize(11)
 
 
-def set_theme(dark_mode=False):
+def set_theme(set_dark_mode=None):
     """
     Set the application's theme based on the dark_mode flag.
 
     Parameters:
         dark_mode (bool): If True, set dark theme. Otherwise, use light theme.
     """
+    global dark_mode
+    if set_dark_mode is not None:
+        dark_mode = set_dark_mode
     main_app = QtWidgets.QApplication.instance()
     if dark_mode:
         # For dark mode, configure pyqtgraph with dark background.
@@ -164,6 +172,128 @@ class DragDropGraphicLayoutWidget(pg.GraphicsLayoutWidget):
             self.dropped.emit(links)
         else:
             event.ignore()
+
+
+def _get_color(color):
+    """
+    Get the RGB color value for a given color name.
+
+    Parameters:
+        color (str): Name of the color.
+
+    Returns:
+        tuple: RGB color value.
+    """
+    if color in ["red", "r"]:
+        if dark_mode:
+            return (75, 0, 0)
+        return (255, 180, 180)
+    if color in ["green", "g"]:
+        if dark_mode:
+            return (0, 75, 0)
+        return (180, 255, 180)
+    if color in ["white", "w"]:
+        if dark_mode:
+            return (0, 0, 0)
+        return (255, 255, 255)
+    if color in ["black", "b"]:
+        if dark_mode:
+            return (255, 255, 255)
+        return (0, 0, 0)
+
+
+class Box_and_Line_Widget(QtWidgets.QWidget):
+    textChanged = QtCore.Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QtWidgets.QHBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.box = QtWidgets.QComboBox()
+
+        self.line = QtWidgets.QLineEdit()
+
+        layout.addWidget(self.box)
+        layout.addWidget(self.line)
+
+        self.box.currentTextChanged.connect(self._text_changed)
+        self.line.textChanged.connect(self._line_changed)
+        self._box_max_width = self.box.maximumWidth()
+
+        self._box_items = []
+
+    def clear(self):
+        """
+        Clear the combo box and line edit.
+        """
+        self.box.clear()
+        self.line.clear()
+
+    def _line_changed(self, text):
+        if not text:
+            self.line.setStyleSheet(f'background-color: rgb{_get_color("white")}')
+            return
+        try:
+            evaluate_string(text, self._box_items)
+            self.line.setStyleSheet(f'background-color: rgb{_get_color("green")}')
+            self._text_changed(text)
+        except Exception:
+            self.line.setStyleSheet(f'background-color: rgb{_get_color("red")}')
+
+    def _text_changed(self, text):
+        """
+        Emit the textChanged signal with the current text.
+
+        Parameters:
+            text (str): The current text from the combo box or line edit.
+        """
+        if self.box.currentText() == "custom value":
+            text = self.line.text()
+            self.box.maximumWidth
+            self.box.setMaximumWidth(20)
+            self.line.show()
+        else:
+            text = self.box.currentText()
+            self.box.setMaximumWidth(self._box_max_width)
+            self.line.hide()
+        self.textChanged.emit(text)
+
+    def addItems(self, items):
+        """
+        Add items to the combo box.
+
+        Parameters:
+            items (list): List of items to add to the combo box.
+        """
+        self.box.addItems(items + ["custom value"])
+        self._box_items = items
+
+    def setText(self, text):
+        """
+        Set the text of the line edit.
+
+        Parameters:
+            text (str): The text to set in the line edit.
+        """
+        if text in self._box_items:
+            self.box.setCurrentText(text)
+        else:
+            self.box.setCurrentText("custom value")
+            self.line.setText(text)
+
+    def currentText(self):
+        """
+        Get the current text from the combo box or line edit.
+
+        Returns:
+            str: The current text.
+        """
+        if self.box.currentText() == "custom value":
+            return self.line.text()
+        return self.box.currentText()
 
 
 class CAMELS_Viewer(QtWidgets.QMainWindow):
@@ -303,6 +433,7 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         self.image_data = None
 
         self.showMaximized()
+        self._last_plot_type = None
 
         # Ensure that pandas is installed.
         if not PANDAS_INSTALLED:
@@ -403,10 +534,11 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         box1.addItems(data_sets)
         self.plot_table.setCellWidget(row, 3, box1)
 
-        box2 = QtWidgets.QComboBox()
-        self.plot_table.setCellWidget(row, 1, box2)
-        box3 = QtWidgets.QComboBox()
-        self.plot_table.setCellWidget(row, 2, box3)
+        combo_x = Box_and_Line_Widget()
+        self.plot_table.setCellWidget(row, 1, combo_x)
+
+        combo_y = Box_and_Line_Widget()
+        self.plot_table.setCellWidget(row, 2, combo_y)
 
         # Create combo boxes for color, symbol, and linestyle.
         box4 = QtWidgets.QComboBox()
@@ -434,10 +566,10 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         box1.currentTextChanged.connect(
             lambda text=None, x=row: self._update_x_y_comboboxes(x)
         )
-        box2.currentTextChanged.connect(
+        combo_x.textChanged.connect(
             lambda text=None, x=row: self._add_or_change_plot_data(x)
         )
-        box3.currentTextChanged.connect(
+        combo_y.textChanged.connect(
             lambda text=None, x=row: self._add_or_change_plot_data(x)
         )
         box4.currentTextChanged.connect(
@@ -464,13 +596,13 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         data_set = data[data_set_name]
         data_keys = list(data_set.keys())
         # Update X axis combo box.
-        box = self.plot_table.cellWidget(row, 1)
-        box.clear()
-        box.addItems(data_keys)
+        widget = self.plot_table.cellWidget(row, 1)
+        widget.clear()
+        widget.addItems(data_keys)
         # Update Y axis combo box.
-        box = self.plot_table.cellWidget(row, 2)
-        box.clear()
-        box.addItems(data_keys)
+        widget = self.plot_table.cellWidget(row, 2)
+        widget.clear()
+        widget.addItems(data_keys)
         self._add_or_change_plot_data(row)
 
     def load_measurement(self):
@@ -518,6 +650,8 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         Refresh the entire plot area by clearing and re-adding all plot items.
         """
         self.image_plot.clear()
+        self.image_plot.addItem(self.image)
+        self.image_plot.addItem(self.image_ROI)
         self.xy_plot.clear()
         self.roi_intensity_plot.clear()
         self.plot_items.clear()
@@ -565,17 +699,33 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         symbol = self.plot_table.cellWidget(number, 5).currentText()
         linestyle = self.plot_table.cellWidget(number, 6).currentText()
         data = self._get_current_data(number)
-        try:
+        if x_data in data:
             x = data[x_data]
+        else:
+            try:
+                x = evaluate_string(x_data, data)
+            except Exception as e:
+                print(f"Could not evaluate x data: {x_data}\n{e}")
+                return
+        if y_data in data:
             y = data[y_data]
-        except KeyError:
-            return
+        else:
+            try:
+                y = evaluate_string(y_data, data)
+            except Exception as e:
+                print(f"Could not evaluate y data: {y_data}\n{e}")
+                return
         try:
             x = x.astype(float)
             y = y.astype(float)
         except ValueError:
             print("Could not convert data to float.")
             return
+        except AttributeError:
+            if not isinstance(x, np.ndarray):
+                x = np.array(x)
+            if not isinstance(y, np.ndarray):
+                y = np.array(y)
 
         # Disconnect intensity line signals to prevent recursive updates.
         self.intensity_line_lo.sigPositionChanged.disconnect()
@@ -586,6 +736,10 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         self.intensity_line_hi.setValue(x.max())
 
         if x.ndim == 1 and y.ndim == 1:
+            if self._last_plot_type != "1D":
+                self._last_plot_type = "1D"
+                self.update_plot()
+                return
             # 1D plot: create or update a plot data item.
             if number >= len(self.plot_items):
                 item = pg.PlotDataItem(
@@ -620,13 +774,22 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
                 item.hide()
             self.xy_plot.autoRange()
             self.image_plot.hide()
+            self.histogram.hide()
+            self.image_xlabel.setText("")
+            self.image_ylabel.setText("")
+            self.intensity_line_lo.hide()
+            self.intensity_line_hi.hide()
             self.roi_intensity_plot.hide()
             self.multi_selection_widget.hide()
         elif x.ndim == 2 and y.ndim == 2:
             # 2D plot (integrated image) requires the multi-selection widget.
             self.make_multi_selection_widget(number)
             self.image_plot.show()
+            self.image.show()
             self.image_plot.setTitle(f"integrated intensity {y_data}")
+            self.intensity_line_lo.show()
+            self.intensity_line_hi.show()
+            self._last_plot_type = "2D"
         else:
             print("Could not plot data, please check the data shapes.")
             return
@@ -669,6 +832,7 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         self.histogram.show()
         self.image_plot.autoRange()
         self.image_ROI.setPos((0, 0))
+        self.image_ROI.show()
         self._image_roi_moved()
 
     def _update_intensities(self, number):
@@ -729,8 +893,24 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
             self.roi_intensity_plot.hide()
             return False
 
-        x_data = sorted_data[x_name]
-        y_data = sorted_data[y_name]
+        if x_name in sorted_data:
+            x_data = sorted_data[x_name]
+        else:
+            try:
+                x_data = evaluate_string(x_name, sorted_data)
+                sorted_data[x_name] = x_data
+            except Exception as e:
+                print(f"Could not evaluate x data: {x_name}\n{e}")
+                return False
+        if y_name in sorted_data:
+            y_data = sorted_data[y_name]
+        else:
+            try:
+                y_data = evaluate_string(y_name, sorted_data)
+                sorted_data[y_name] = y_data
+            except Exception as e:
+                print(f"Could not evaluate y data: {y_name}\n{e}")
+                return False
         x_ax_data = sorted_data[x_ax]
         if y_ax != "None":
             y_ax_data = sorted_data[y_ax]
@@ -784,6 +964,11 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
             self.image.setImage(
                 self.image_data, levels=[np.min(intensities), np.max(intensities)]
             )
+            self.image_plot.show()
+            self.histogram.show()
+            self.image_plot.autoRange()
+            self.histogram.autoHistogramRange()
+            self.roi_intensity_plot.hide()
         else:
             try:
                 self.roi_intensity_plot.plot(
@@ -792,6 +977,8 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
                 self.roi_intensity_plot.show()
                 self.roi_intensity_plot.autoRange()
                 self.roi_intensity_plot.addItem(self.pos_line_1d)
+                self.image_plot.hide()
+                self.histogram.hide()
             except Exception as e:
                 print(e)
                 self.image_info_text.setText(f"Error: {e}")
@@ -834,7 +1021,7 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         except Exception:
             pass
         self.xy_plot.clear()
-        self.xy_plot.plot(x_data, y_data)
+        self.xy_plot.plot(x_data, y_data, pen=pg.mkPen(color=_get_color("black")))
         self.xy_plot.addItem(self.intensity_line_lo)
         self.xy_plot.addItem(self.intensity_line_hi)
 
@@ -876,7 +1063,7 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         except Exception:
             pass
         self.xy_plot.clear()
-        self.xy_plot.plot(x_data, y_data)
+        self.xy_plot.plot(x_data, y_data, pen=pg.mkPen(color=_get_color("black")))
         self.xy_plot.addItem(self.intensity_line_lo)
         self.xy_plot.addItem(self.intensity_line_hi)
 
@@ -907,8 +1094,9 @@ class Multi_Selection_Widget(QtWidgets.QWidget):
 
         self.keys = list(data.keys())
         # Remove x-y plot keys.
-        self.keys.remove(self.x_selection)
-        if self.x_selection != self.y_selection:
+        if self.x_selection in self.keys:
+            self.keys.remove(self.x_selection)
+        if self.y_selection in self.keys:
             self.keys.remove(self.y_selection)
         self.x_image_box.addItems(self.keys)
         self.y_image_box.addItems(["None"] + self.keys)
@@ -1016,7 +1204,7 @@ def run_viewer():
     Initialize and run the CAMELS Viewer application.
     """
     app = QtWidgets.QApplication([])
-    set_theme()  # Use light theme by default.
+    set_theme()
     sys.excepthook = exception_hook  # Set the exception hook for debugging.
     window = CAMELS_Viewer()
     window.show()

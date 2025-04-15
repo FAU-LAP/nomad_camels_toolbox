@@ -7,6 +7,14 @@ Simplify your data evaluation with the NOMAD CAMELS toolbox!
 
 # Changelog
 
+### 0.2.1
+Features:
+- custom plots in qt-viewer
+
+Fixes:
+- installation fixed
+- qt viewer more stable
+
 ## 0.2.0
 Features:
 - Recreating plots from CAMELS with a single function
