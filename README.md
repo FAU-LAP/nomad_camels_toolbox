@@ -7,6 +7,10 @@ Simplify your data evaluation with the NOMAD CAMELS toolbox!
 
 # Changelog
 
+### 0.2.2
+Fixes:
+- fixed import problems
+
 ### 0.2.1
 Features:
 - custom plots in qt-viewer

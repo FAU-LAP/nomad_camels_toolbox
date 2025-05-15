@@ -19,11 +19,11 @@ import copy
 
 import pyqtgraph as pg
 
-from utils.exception_hook import exception_hook
-from utils.string_evaluation import evaluate_string
-import graphics
+from .utils.exception_hook import exception_hook
+from .utils.string_evaluation import evaluate_string
 
-from data_reader import read_camels_file, PANDAS_INSTALLED
+from .data_reader import read_camels_file, PANDAS_INSTALLED
+import graphics
 
 
 dark_mode = False

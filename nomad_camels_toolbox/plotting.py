@@ -1,6 +1,3 @@
-from data_reader import read_camels_file, decide_entry_key
-from utils.fit_variable_renaming import replace_name
-from utils.string_evaluation import evaluate_string
 import h5py
 import json
 import lmfit
@@ -9,6 +6,10 @@ import warnings
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
+from .data_reader import read_camels_file, decide_entry_key
+from .utils.fit_variable_renaming import replace_name
+from .utils.string_evaluation import evaluate_string
 
 
 def _recursive_plots_from_sub_protocol_dict(own_name, protocol_info):
