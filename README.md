@@ -7,6 +7,9 @@ Simplify your data evaluation with the NOMAD CAMELS toolbox!
 
 # Changelog
 
+### 0.2.3
+- fixed plots not being made if two plots had the same name
+
 ### 0.2.2
 Fixes:
 - fixed import problems

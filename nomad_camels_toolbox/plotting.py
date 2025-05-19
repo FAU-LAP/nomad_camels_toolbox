@@ -157,7 +157,8 @@ def recreate_plots(
                             stream,
                             fig,
                         )
-                figures[plot["name"]] = fig
+                name = "_".join((stream, plot["name"]))
+                figures[name] = fig
             elif plot["plt_type"] == "2D plot":
                 # For 2D plots, prepare x, y and z data; evaluate strings if needed.
                 if plot["x_axis"] in df:
@@ -212,7 +213,8 @@ def recreate_plots(
                     xaxis_title=plot["xlabel"] or plot["x_axis"],
                     yaxis_title=plot["ylabel"] or plot["y_axes"]["formula"][0],
                 )
-                figures[plot["name"]] = fig
+                name = "_".join((stream, plot["name"]))
+                figures[name] = fig
     if show_figures:
         for fig in figures.values():
             fig.show()
@@ -320,6 +322,6 @@ def _make_single_fit(func, y, x, stream, params, model, df, fit_data, y_axis, fi
         )
     except Exception as e:
         warnings.warn(
-            f"Could not plot the fit {func} for {y} vs {x}.\n"
+            f'Could not plot the fit {func} for {y} vs {x} in the stream "{stream}".\n'
             f"Please check the fit parameters and the data.\n{e}"
         )
