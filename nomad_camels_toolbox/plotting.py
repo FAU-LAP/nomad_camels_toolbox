@@ -157,7 +157,17 @@ def recreate_plots(
                             stream,
                             fig,
                         )
-                name = "_".join((stream, plot["name"]))
+                name = f"{stream}: {plot['name']}"
+                fig.update_layout(
+                    legend=dict(
+                        orientation="h",  # or "v" depending on your preference
+                        yanchor="bottom",
+                        y=1.02,  # just above the plot area
+                        xanchor="right",
+                        x=1,
+                    ),
+                    margin=dict(l=40, r=40, t=40, b=40),  # adjust margins if necessary
+                )
                 figures[name] = fig
             elif plot["plt_type"] == "2D plot":
                 # For 2D plots, prepare x, y and z data; evaluate strings if needed.
@@ -213,7 +223,7 @@ def recreate_plots(
                     xaxis_title=plot["xlabel"] or plot["x_axis"],
                     yaxis_title=plot["ylabel"] or plot["y_axes"]["formula"][0],
                 )
-                name = "_".join((stream, plot["name"]))
+                name = f"{stream}: {plot['name']}"
                 figures[name] = fig
     if show_figures:
         for fig in figures.values():

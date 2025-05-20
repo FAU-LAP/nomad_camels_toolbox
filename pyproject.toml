@@ -1,6 +1,6 @@
 [project]
 name = "nomad-camels-toolbox"
-version = "0.2.3"
+version = "0.2.4"
 description = "This package provides easy access to data generated with nomad-camels"
 authors = [
     {name = "nomad-camels team",email = "nomad-camels@fau.de"}
@@ -14,8 +14,14 @@ dependencies = [
 [project.optional-dependencies]
 pandas = ["pandas>=2.2.3,<3.0.0"]
 qt = ["PySide6>=6.6.0", "pyqtgraph>=0.13.3"]
-plotly = ["plotly>=5.15.0", "lmfit>=0.1.2", "pandas"]
-all = ["pandas", "qt", "plotly"]
+plotly = ["plotly>=5.15.0", "lmfit>=0.1.2", "pandas>=2.2.3,<3.0.0"]
+all = [
+    "pandas>=2.2.3,<3.0.0",
+    "PySide6>=6.6.0",
+    "pyqtgraph>=0.13.3",
+    "plotly>=5.15.0",
+    "lmfit>=0.1.2"
+]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
