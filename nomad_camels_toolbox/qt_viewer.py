@@ -26,6 +26,39 @@ from .data_reader import read_camels_file, PANDAS_INSTALLED
 from nomad_camels_toolbox import graphics
 
 
+splitter_style = """
+    QSplitter::handle {
+        border-radius: 3px;
+    }
+"""
+splitter_style_light = (
+    splitter_style
+    + """
+    QSplitter::handle {
+        background: #aaaaaa;
+        border: 1px solid #0a0a0a;
+    }
+    QSplitter::handle:hover {
+        background-color: #3a3a3a;
+        border: 1px dashed white;
+    }
+"""
+)
+splitter_style_dark = (
+    splitter_style
+    + """
+    QSplitter::handle {
+        background: gray;
+        border: 1px solid #5a5a5a;
+    }
+    QSplitter::handle:hover {
+        background-color: #bababa;
+        border: 1px dashed black;
+    }
+"""
+)
+
+
 dark_mode = False
 
 
@@ -122,6 +155,9 @@ def set_theme(set_dark_mode=None):
         palette = light_palette
     main_app.setPalette(palette)
     main_app.setStyle("Fusion")
+    main_app.setStyleSheet(
+        splitter_style_light if not dark_mode else splitter_style_dark
+    )
 
 
 class DragDropGraphicLayoutWidget(pg.GraphicsLayoutWidget):
@@ -735,6 +771,11 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
         self.intensity_line_lo.setValue(x.min())
         self.intensity_line_hi.setValue(x.max())
 
+        self.xy_plot.show()
+        self.image.clear()
+
+        self.image_plot.setLabel("bottom", "")
+        self.image_plot.setLabel("left", "")
         if x.ndim == 1 and y.ndim == 1:
             if self._last_plot_type != "1D":
                 self._last_plot_type = "1D"
@@ -781,6 +822,7 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
             self.intensity_line_hi.hide()
             self.roi_intensity_plot.hide()
             self.multi_selection_widget.hide()
+            self.xy_plot.show()
         elif x.ndim == 2 and y.ndim == 2:
             # 2D plot (integrated image) requires the multi-selection widget.
             self.make_multi_selection_widget(number)
@@ -790,7 +832,57 @@ class CAMELS_Viewer(QtWidgets.QMainWindow):
             self.intensity_line_lo.show()
             self.intensity_line_hi.show()
             self._last_plot_type = "2D"
+        elif x.ndim == 1 and y.ndim == 2 or x.ndim == 2 and y.ndim == 1:
+            # 1D plot with 2D data: show the image plot.
+            self.image_plot.setTitle("")
+            self.image_plot.show()
+            self.image.show()
+            self.histogram.show()
+            self.image_xlabel.setText("")
+            self.image_ylabel.setText("")
+            self.intensity_line_lo.hide()
+            self.intensity_line_hi.hide()
+            self.roi_intensity_plot.hide()
+            self.xy_plot.hide()
+            self.image_ROI.hide()
+            self.multi_selection_widget.hide()
+            if x.ndim == 1:
+                x_plot = x
+                self.image_plot.setLabel("bottom", x_data)
+                if x.shape[0] == y.shape[0]:
+                    y_plot = np.arange(y.shape[0])
+                    z_plot = y
+                elif x.shape[0] == y.shape[1]:
+                    y_plot = np.arange(y.shape[1])
+                    z_plot = y.T
+                else:
+                    print(
+                        f"Could not plot data, please check the data shapes: {x.shape}, {y.shape}"
+                    )
+                    return
+            else:
+                y_plot = y
+                self.image_plot.setLabel("left", y_data)
+                if y.shape[0] == x.shape[0]:
+                    x_plot = np.arange(x.shape[0])
+                    z_plot = x.T
+                elif y.shape[0] == x.shape[1]:
+                    x_plot = np.arange(x.shape[1])
+                    z_plot = x
+                else:
+                    print(
+                        f"Could not plot data, please check the data shapes: {x.shape}, {y.shape}"
+                    )
+                    return
+            self.image.setImage(z_plot)
+            self.image.setLevels((z_plot.min(), z_plot.max()))
+            self.image.setRect(
+                pg.QtCore.QRectF(
+                    x_plot.min(), y_plot.min(), np.ptp(x_plot), np.ptp(y_plot)
+                )
+            )
         else:
+            self.multi_selection_widget.hide()
             print("Could not plot data, please check the data shapes.")
             return
 
