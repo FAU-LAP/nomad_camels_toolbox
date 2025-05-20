@@ -23,7 +23,7 @@ from .utils.exception_hook import exception_hook
 from .utils.string_evaluation import evaluate_string
 
 from .data_reader import read_camels_file, PANDAS_INSTALLED
-import graphics
+from nomad_camels_toolbox import graphics
 
 
 dark_mode = False
