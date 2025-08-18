@@ -20,6 +20,9 @@ Single installation options can be installed by using `pip install nomad-camels-
 
 # Changelog
 
+### 0.2.7
+- made selection of dataset in reader more intuitive
+
 ### 0.2.4
 - plots now show legend over the plot, not anymore making the plot tiny
 - fixed optional dependencies

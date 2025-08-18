@@ -62,22 +62,22 @@ def read_camels_file(
                     return_fits=return_fits,
                 )
             return data
-        if data_set_key:
-            if data_set_key not in f[key]["data"] and data_set_key != "primary":
-                print(
-                    f'The data set "{data_set_key}" you specified was not found in the data.'
-                )
-                groups = ["primary"]
-                for group in f[key]["data"]:
-                    if (
-                        isinstance(f[key]["data"][group], h5py.Group)
-                        and group != "fits"
-                    ):
-                        groups.append(group)
-                if len(groups) > 1:
-                    data_set_key = _ask_for_selection(groups)
-                else:
-                    data_set_key = groups[0]
+        if (
+            data_set_key
+            and data_set_key not in f[key]["data"]
+            and data_set_key != "primary"
+        ) or not data_set_key:
+            print(
+                f'The data set "{data_set_key}" you specified was not found in the data.'
+            )
+            groups = ["primary"]
+            for group in f[key]["data"]:
+                if isinstance(f[key]["data"][group], h5py.Group) and group != "fits":
+                    groups.append(group)
+            if len(groups) > 1:
+                data_set_key = _ask_for_selection(groups)
+            else:
+                data_set_key = groups[0]
         else:
             data_set_key = "primary"
         return _read_dataset(
