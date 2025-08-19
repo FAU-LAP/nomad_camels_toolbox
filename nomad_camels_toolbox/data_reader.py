@@ -250,9 +250,3 @@ def h5_group_to_dict(group):
             if isinstance(data[k], bytes):
                 data[k] = data[k].decode("utf-8")
     return data
-
-
-f = r"C:\Users\od93yces\Downloads\rough_adjust_burster_force_sensor_scan.h5"
-d = read_camels_file(f, read_all_datasets=True)
-print(d)
-1

@@ -3,6 +3,7 @@
 This package provides easy access to data generated with [NOMAD CAMELS](https://github.com/FAU-LAP/NOMAD-CAMELS).
 
 Simplify your data evaluation with the NOMAD CAMELS toolbox!
+More information about the toolbox can be found in the [documentation of NOMAD CAMELS](https://fau-lap.github.io/NOMAD-CAMELS/doc/nomad_camels_toolbox.html).
 
 ## Optional Dependencies
 To install the NOMAD CAMELS toolbox, run
@@ -19,6 +20,9 @@ Single installation options can be installed by using `pip install nomad-camels-
 
 
 # Changelog
+
+### 0.2.9
+- added direct link to the toolbox documentation
 
 ### 0.2.8
 - Fixed a bug when using data_set_key
