@@ -78,8 +78,6 @@ def read_camels_file(
                 data_set_key = _ask_for_selection(groups)
             else:
                 data_set_key = groups[0]
-        else:
-            data_set_key = "primary"
         return _read_dataset(
             f[key]["data"],
             data_set_key,
@@ -252,3 +250,9 @@ def h5_group_to_dict(group):
             if isinstance(data[k], bytes):
                 data[k] = data[k].decode("utf-8")
     return data
+
+
+f = r"C:\Users\od93yces\Downloads\rough_adjust_burster_force_sensor_scan.h5"
+d = read_camels_file(f, read_all_datasets=True)
+print(d)
+1

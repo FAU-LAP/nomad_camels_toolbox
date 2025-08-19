@@ -20,6 +20,9 @@ Single installation options can be installed by using `pip install nomad-camels-
 
 # Changelog
 
+### 0.2.8
+- Fixed a bug when using data_set_key
+
 ### 0.2.7
 - made selection of dataset in reader more intuitive
 
