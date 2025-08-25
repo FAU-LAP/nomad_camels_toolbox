@@ -49,10 +49,7 @@ def read_camels_file(
         key = decide_entry_key(f, entry_key)
         if read_all_datasets:
             data = {}
-            groups = ["primary"]
-            for group in f[key]["data"]:
-                if isinstance(f[key]["data"][group], h5py.Group) and group != "fits":
-                    groups.append(group)
+            groups = ["primary"] + _get_data_groups(f[key]["data"])
             for data_set_key in groups:
                 data[data_set_key] = _read_dataset(
                     f[key]["data"],
@@ -70,10 +67,7 @@ def read_camels_file(
             print(
                 f'The data set "{data_set_key}" you specified was not found in the data.'
             )
-            groups = ["primary"]
-            for group in f[key]["data"]:
-                if isinstance(f[key]["data"][group], h5py.Group) and group != "fits":
-                    groups.append(group)
+            groups = ["primary"] + _get_data_groups(f[key]["data"])
             if len(groups) > 1:
                 data_set_key = _ask_for_selection(groups)
             else:
@@ -85,6 +79,19 @@ def read_camels_file(
             read_variables=read_variables,
             return_fits=return_fits,
         )
+
+
+def _get_data_groups(data_group, prefix=""):
+    groups = []
+    for group in data_group:
+        if (
+            isinstance(data_group[group], h5py.Group)
+            and group != "fits"
+            and not group.endswith("_variable_signal")
+        ):
+            groups.append(prefix + group)
+            groups.extend(_get_data_groups(data_group[group], prefix + group + "/"))
+    return groups
 
 
 def _read_dataset(

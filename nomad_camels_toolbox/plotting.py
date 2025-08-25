@@ -20,14 +20,19 @@ def _recursive_plots_from_sub_protocol_dict(own_name, protocol_info):
         plot_info[own_name] = primary_plots
     # Iterate over each step in the protocol.
     for step, step_info in protocol_info["loop_step_dict"].items():
+        name = (
+            f'{own_name}/{step_info["name"]}'
+            if own_name != "primary"
+            else step_info["name"]
+        )
         if "plots" in step_info:
             # If plots exist for this step, add them to the dictionary keyed by the step name.
-            plot_info[step_info["name"]] = step_info["plots"]
+            plot_info[name] = step_info["plots"]
         elif "_sub_protocol_dict" in step_info:
             # Recurse into any subprotocol dictionaries and merge the result.
             plot_info.update(
                 _recursive_plots_from_sub_protocol_dict(
-                    step_info["name"], step_info["_sub_protocol_dict"]
+                    name, step_info["_sub_protocol_dict"]
                 )
             )
     return plot_info
@@ -92,6 +97,7 @@ def recreate_plots(
                 f'The stream "{stream}" you specified was not found in the data.\n'
                 "Check the available streams in the file."
             )
+            continue
         df = data[stream][0]
         fit_data = data[stream][1]
         for plot in plots:
@@ -311,6 +317,7 @@ def _make_fit(fit_info, fit_data, df, y_axes, stream, figure, is_all_fit=False):
 def _make_single_fit(func, y, x, stream, params, model, df, fit_data, y_axis, figure):
     try:
         fit_name = "_".join((func, y, "v", x, stream))
+        fit_name = fit_name.replace("/", "||sub_stream||")
         fit_name = replace_name(fit_name)
         for param in params:
             params[param].set(value=fit_data[fit_name][param])

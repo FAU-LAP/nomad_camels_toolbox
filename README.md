@@ -21,6 +21,9 @@ Single installation options can be installed by using `pip install nomad-camels-
 
 # Changelog
 
+### 0.3.0
+- Now compatible with more nested data structure from CAMELS 1.9.0
+
 ### 0.2.9
 - added direct link to the toolbox documentation
 
