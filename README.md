@@ -7,6 +7,11 @@ Simplify your data evaluation with the NOMAD CAMELS toolbox!
 
 # Changelog
 
+### 0.2.1
+Changes:
+- Data points in plots are now shown as markers instead of lines
+- Fits are now shown as dashed lines
+
 ## 0.2.0
 Features:
 - Recreating plots from CAMELS with a single function
