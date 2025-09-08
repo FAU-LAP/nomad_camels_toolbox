@@ -136,7 +136,7 @@ def recreate_plots(
                     else:
                         y_data = evaluate_string(y_name, df)
                     fig.add_trace(
-                        go.Scatter(x=x_data, y=y_data, mode="lines", name=y_name),
+                        go.Scatter(x=x_data, y=y_data, mode="markers", name=y_name),
                         secondary_y=y_axis == "right",
                     )
                 # Handle fits if defined.
@@ -334,6 +334,7 @@ def _make_single_fit(func, y, x, stream, params, model, df, fit_data, y_axis, fi
                 y=y_data,
                 mode="lines",
                 name=fit_name,
+                lines=dict(dash="dash"),
             ),
             secondary_y=y_axis == "right",
         )
