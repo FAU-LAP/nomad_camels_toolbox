@@ -21,7 +21,7 @@ Single installation options can be installed by using `pip install nomad-camels-
 
 # Changelog
 
-### 0.3.1
+### 0.3.2
 - Display data as points and fits as dashed lines
 
 ### 0.3.0

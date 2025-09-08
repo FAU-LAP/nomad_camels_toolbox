@@ -334,7 +334,7 @@ def _make_single_fit(func, y, x, stream, params, model, df, fit_data, y_axis, fi
                 y=y_data,
                 mode="lines",
                 name=fit_name,
-                lines=dict(dash="dash"),
+                line=dict(dash="dash"),
             ),
             secondary_y=y_axis == "right",
         )
