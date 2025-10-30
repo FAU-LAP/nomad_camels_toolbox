@@ -7,6 +7,7 @@ import sys
 import ast
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from packaging import version
 
 from data_reader import read_camels_file, decide_entry_key
 from utils.fit_variable_renaming import replace_name
@@ -175,10 +176,43 @@ def find_all_paths(data_structure, target_key):
     return found_paths
 
 
-def recreate_plots_v2(
-    file_path, entry_key: str = "", data_set_key: str = "", show_figures=True
+def get_camels_suitcase_version(file_path):
+    """Get the version of suitcase-nomad-camels-hdf5 used to create the CAMELS file.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the CAMELS file.
+
+    Returns
+    -------
+    str
+        The version string of suitcase-nomad-camels-hdf5, or "unknown" if not found.
+    """
+    suitcase_version = "unknown"
+    try:
+        with h5py.File(file_path, "r") as f:
+            for key in f:
+                if key.endswith("_entry"):
+                    camels_group = f[key]
+                    suitcase_version = camels_group[
+                        "program/python_environment/suitcase-nomad-camels-hdf5"
+                    ][()].decode("utf-8")
+    except Exception as e:
+        warnings.warn(f"Could not read suitcase version from file: {e}")
+    return suitcase_version
+
+
+def recreate_plots(
+    file_path,
+    entry_key: str = "",
+    data_set_key: str = "",
+    show_figures=True,
+    force=None,
 ):
     """Recreate plots from a CAMELS file as Plotly figures.
+    This is the new version that fully supports nested protocols. It only works with files created with suitcase-nomad-camels-hdf5 >= 1.0.0
+    This is always used to try and read CAMELS HDF5 files unless the first sniffing detects an older version of suitcase-nomad-camels-hdf5.
 
     Parameters
     ----------
@@ -187,9 +221,11 @@ def recreate_plots_v2(
     entry_key : str, optional
         The entry key to use for reading the file. If not provided, the first entry will be used.
     data_set_key : str, optional
-        The dataset key to use for reading the file. If not provided, all datasets will be used.
+        --- DEPRECATED ---
     show_figures : bool, optional
         If True, the figures will be displayed. Default is True.
+    force : str, optional
+        If "legacy", forces the use of the legacy method. If "current", forces the use of the new method.
 
 
     Returns
@@ -197,23 +233,46 @@ def recreate_plots_v2(
     dict
         A dictionary containing the recreated figures, keyed by their names.
     """
+    if force == "legacy":
+        print("Using the legacy reading method as forced by the user.")
+        return recreate_plots_legacy(
+            file_path,
+            entry_key=entry_key,
+            data_set_key=data_set_key,
+            show_figures=show_figures,
+        )
+    elif force == "current":
+        pass  # continue with the current method
+    else:
+        suitcase_version = get_camels_suitcase_version(file_path)
+
+        # If the suitcase version is older than 1.0.0, fall back to the legacy method
+        if version.parse(suitcase_version) < version.parse("1.0.0"):
+            warnings.warn(
+                f"The CAMELS file was created with suitcase-nomad-camels-hdf5 version {suitcase_version}. "
+                "Falling back to the legacy plot recreation method. "
+                "For full support of nested protocols, please re-export the data using suitcase-nomad-camels-hdf5 >= 1.0.0",
+                UserWarning,
+                stacklevel=2,
+            )
+            return recreate_plots_legacy(
+                file_path,
+                entry_key=entry_key,
+                data_set_key=data_set_key,
+                show_figures=show_figures,
+            )
+    # Continue with the new method
+    if data_set_key:
+        warnings.warn(
+            "'data_set_key' is deprecated for newer CAMELS files using the CAMELS suitcase (data export) > 1.0.0 and is ignored",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     with h5py.File(file_path, "r") as f:
         key = decide_entry_key(f, entry_key)
-    #     protocol_json = f[key]["measurement_details/protocol_json"][()].decode("utf-8")
-    # # Parse the protocol JSON into a Python dictionary.
-    # protocol_info = json.loads(protocol_json)
-    # Walk through the HDF5 structure starting at f[key] to find every entry that starts with "plot_"
     list_of_plot_paths = find_plot_paths(file_path, key=key)
     # order the list so that it goes plot_1, plot_2, plot_3, ...
     list_of_plot_paths.sort(key=lambda x: int(x.split("plot_")[-1].split("/")[0]))
-    # if len(list_of_plot_paths) != len(protocol_info["plots"]):
-    #     warnings.warn(
-    #         "The number of found plot entries in the HDF5 file does not match the number of plots defined in the protocol JSON.\n"
-    #         "This might indicate an inconsistency in the file."
-    #     )
-    #     return
-    # for plot in protocol_info["plots"]:
-    #     print(plot)
     built_plots = build_plots_from_paths(file_path, list_of_plot_paths)
     if show_figures:
         for fig in built_plots.values():
@@ -222,7 +281,7 @@ def recreate_plots_v2(
 
 
 def build_plots_from_paths(file_path, list_of_plot_paths):
-    """Build Plotly figures from a list of plot paths in a CAMELS file.
+    """Build Plotly figures from a list of plot paths in a CAMELS file. Also builds the fits if they are present.
 
     Parameters
     ----------
@@ -298,7 +357,7 @@ def build_plots_from_paths(file_path, list_of_plot_paths):
                         elif y_axis_index == 2:
                             fig.update_yaxes(
                                 title_text=entry.attrs["long_name"], secondary_y=True
-                            )                            
+                            )
                 if "fit" in plot_group:
                     fit_group = plot_group["fit"]
                     for fit_entry in fit_group.values():
@@ -424,7 +483,7 @@ def find_plot_paths(filepath, key=""):
     return found_paths
 
 
-def recreate_plots(
+def recreate_plots_legacy(
     file_path, entry_key: str = "", data_set_key: str = "", show_figures=True
 ):
     """Recreate plots from a CAMELS file as Plotly figures.
@@ -729,10 +788,4 @@ def _make_single_fit(func, y, x, stream, params, model, df, fit_data, y_axis, fi
             f'Could not plot the fit {func} for {y} vs {x} in the stream "{stream}".\n'
             f"Please check the fit parameters and the data.\n{e}"
         )
-
-
-if __name__ == "__main__":
-    xy = recreate_plots_v2(
-        r"C:\Users\yh43epyd\Documents\NOMAD_CAMELS_data\Jon_Doe\Si_Diode\test_it_copy_60.h5",
-        show_figures=True,
-    )
+        
