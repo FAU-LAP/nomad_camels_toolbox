@@ -3,13 +3,97 @@ import json
 import lmfit
 import numpy as np
 import warnings
-
+import sys
+import ast
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from .data_reader import read_camels_file, decide_entry_key
-from .utils.fit_variable_renaming import replace_name
-from .utils.string_evaluation import evaluate_string
+from data_reader import read_camels_file, decide_entry_key
+from utils.fit_variable_renaming import replace_name
+from utils.string_evaluation import evaluate_string
+
+
+def _wrap_recursive(node: ast.expr, source_str: str) -> str:
+    """
+    Internal recursive helper function to traverse the AST.
+
+    We split on low-precedence operators (+, -) and treat all
+    other expressions (like 'abc**2' or '(a*b)') as "atoms".
+    """
+
+    # --- Recursive Case ---
+    # Check if the node is a Binary Operation AND its operator is
+    # low-precedence (Add or Subtract).
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
+        # This is a good place to split!
+        # Recursively call the function on the left and right children.
+        left_str = _wrap_recursive(node.left, source_str)
+        right_str = _wrap_recursive(node.right, source_str)
+
+        # Reconstruct the operator. We add spaces for readability.
+        # This loses original spacing (e.g. " + " vs "+") but is
+        # far more robust than trying to find the operator in the source.
+        op_char = "+" if isinstance(node.op, ast.Add) else "-"
+
+        # Return the joined string with the <br> tag
+        return f"{left_str}<br> {op_char} {right_str}"
+
+    # --- Base Case ---
+    # If the node is NOT a low-precedence BinOp, we treat it as an "atom".
+    # This includes:
+    # 1. Names (e.g., 'abc')
+    # 2. Constants (e.g., '2', '12')
+    # 3. High-precedence BinOps (e.g., 'abc**2', '3/12')
+    # 4. Expressions in parentheses (e.g., '(a+b)')
+    else:
+        # We return its *exact* original source segment.
+        # This is the magic that prevents "strange cut-offs" and
+        # correctly keeps 'abc**2' or '(a+b)' together.
+        try:
+            return ast.get_source_segment(source_str, node)
+        except Exception as e:
+            # This can happen on very old Python versions or complex/unsupported
+            # AST nodes. We'll include a fallback.
+            print(f"Warning: Could not get source segment (requires Python 3.8+). {e}")
+            # ast.unparse is available in 3.9+ and is a decent fallback.
+            if hasattr(ast, "unparse"):
+                return ast.unparse(node)
+            return "[parsing error]"
+
+
+def wrap_arithmetic_string(source_str: str) -> str:
+    """
+    Wraps a long arithmetic string with <br> tags at logical
+    break points (before + and -) using an Abstract Syntax Tree.
+
+    This method correctly handles operator precedence.
+
+    Args:
+        source_str: The arithmetic string (e.g., "abc**2+xyz-3/12").
+
+    Returns:
+        The wrapped string with <br> tags, or the original
+        string if parsing fails.
+
+    Note:
+        Requires Python 3.8+ for best results.
+    """
+    if not source_str:
+        return ""
+    if len(source_str) < 20:
+        return source_str  # No need to wrap short strings
+    try:
+        # 'eval' mode is used for a single expression
+        tree = ast.parse(source_str, mode="eval")
+
+        # tree.body is the top-level expression node
+        return _wrap_recursive(tree.body, source_str)
+    except SyntaxError as e:
+        print(f"Error: Invalid arithmetic string. {e}")
+        return source_str  # Fallback to original string
+    except Exception as e:
+        print(f"An error occurred during wrapping: {e}")
+        return source_str  # Fallback
 
 
 def _recursive_plots_from_sub_protocol_dict(own_name, protocol_info):
@@ -21,7 +105,7 @@ def _recursive_plots_from_sub_protocol_dict(own_name, protocol_info):
     # Iterate over each step in the protocol.
     for step, step_info in protocol_info["loop_step_dict"].items():
         name = (
-            f'{own_name}/{step_info["name"]}'
+            f"{own_name}/{step_info['name']}"
             if own_name != "primary"
             else step_info["name"]
         )
@@ -36,6 +120,308 @@ def _recursive_plots_from_sub_protocol_dict(own_name, protocol_info):
                 )
             )
     return plot_info
+
+
+def find_all_paths(data_structure, target_key):
+    """
+    Traverses a nested dictionary and list structure and returns
+    all paths to entries with a specific key.
+
+    Args:
+        data_structure (dict or list): The nested structure to search.
+        target_key (str): The key name to search for (e.g., "plots").
+
+    Returns:
+        list: A list of paths, where each path is a list of
+              keys and list indices.
+    """
+    found_paths = []
+
+    # We use a stack for an iterative Depth-First Search (DFS)
+    # Each item on the stack is a tuple: (node, path_to_node)
+    stack = [(data_structure, [])]
+
+    while stack:
+        current_node, current_path = stack.pop()
+
+        # --- Case 1: The current node is a dictionary ---
+        if isinstance(current_node, dict):
+            for key, value in current_node.items():
+                # The new path is the path *to this key*
+                new_path = current_path + [key]
+
+                if key == target_key:
+                    # Found it! Add the path to our results.
+                    found_paths.append(new_path)
+
+                # Push the *value* (the child node) onto the stack
+                # to be explored next.
+                stack.append((value, new_path))
+
+        # --- Case 2: The current node is a list ---
+        elif isinstance(current_node, list):
+            # Iterate through the list with its index
+            for index, value in enumerate(current_node):
+                # The new path uses the list index
+                new_path = current_path + [index]
+
+                # Push the *value* (the list item) onto the stack
+                # to be explored next.
+                stack.append((value, new_path))
+
+        # --- Base Case: Node is not a dict or list (e.g., str, int) ---
+        # We do nothing, as it can't contain more keys.
+
+    return found_paths
+
+
+def recreate_plots_v2(
+    file_path, entry_key: str = "", data_set_key: str = "", show_figures=True
+):
+    """Recreate plots from a CAMELS file as Plotly figures.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the CAMELS file.
+    entry_key : str, optional
+        The entry key to use for reading the file. If not provided, the first entry will be used.
+    data_set_key : str, optional
+        The dataset key to use for reading the file. If not provided, all datasets will be used.
+    show_figures : bool, optional
+        If True, the figures will be displayed. Default is True.
+
+
+    Returns
+    -------
+    dict
+        A dictionary containing the recreated figures, keyed by their names.
+    """
+    with h5py.File(file_path, "r") as f:
+        key = decide_entry_key(f, entry_key)
+    #     protocol_json = f[key]["measurement_details/protocol_json"][()].decode("utf-8")
+    # # Parse the protocol JSON into a Python dictionary.
+    # protocol_info = json.loads(protocol_json)
+    # Walk through the HDF5 structure starting at f[key] to find every entry that starts with "plot_"
+    list_of_plot_paths = find_plot_paths(file_path, key=key)
+    # order the list so that it goes plot_1, plot_2, plot_3, ...
+    list_of_plot_paths.sort(key=lambda x: int(x.split("plot_")[-1].split("/")[0]))
+    # if len(list_of_plot_paths) != len(protocol_info["plots"]):
+    #     warnings.warn(
+    #         "The number of found plot entries in the HDF5 file does not match the number of plots defined in the protocol JSON.\n"
+    #         "This might indicate an inconsistency in the file."
+    #     )
+    #     return
+    # for plot in protocol_info["plots"]:
+    #     print(plot)
+    built_plots = build_plots_from_paths(file_path, list_of_plot_paths)
+    if show_figures:
+        for fig in built_plots.values():
+            fig.show()
+    return built_plots
+
+
+def build_plots_from_paths(file_path, list_of_plot_paths):
+    """Build Plotly figures from a list of plot paths in a CAMELS file.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the CAMELS file.
+    list_of_plot_paths : list
+        A list of full string paths to plot entries in the HDF5 file.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the recreated figures, keyed by their names.
+    """
+    figures = {}
+    with h5py.File(file_path, "r") as f:
+        for plot_path in list_of_plot_paths:
+            plot_group = f[plot_path]
+            # Check if its a 1D plot
+            if "_plot_data_axes" in plot_group:  # This is a 1D plot
+                # Check if any signal should be plotted on the secondary y-axis
+
+                for entry in plot_group.values():
+                    if (
+                        "y_axes_index" in entry.attrs
+                        and entry.attrs["y_axes_index"] == 2
+                    ):
+                        has_second = True
+                        break
+                    else:
+                        has_second = False
+                if has_second:
+                    fig = make_subplots(specs=[[{"secondary_y": True}]])
+                    fig.update_layout(
+                        title=f"Plot from {plot_path}",
+                        showlegend=True,
+                        xaxis_title=plot_group["_plot_data_axes"].attrs["long_name"],
+                    )
+
+                else:
+                    fig = make_subplots()
+                    fig.update_layout(
+                        title=f"Plot from {plot_path}",
+                        showlegend=True,
+                        xaxis_title=plot_group["_plot_data_axes"].attrs["long_name"],
+                    )
+
+                # Get the x axis data
+                x_data = plot_group["_plot_data_axes"][()]
+                # Plot all signals in the plot group
+                for entry in plot_group.values():
+                    if "_plot_data_signal" in entry.name:
+                        y_data = plot_group[entry.name.split("/")[-1]][()]
+                        y_axis_index = entry.attrs["y_axes_index"]
+                        if y_axis_index == 1:
+                            secondary_y = False
+                        else:
+                            secondary_y = True
+                        fig.add_trace(
+                            go.Scatter(
+                                x=x_data,
+                                y=y_data,
+                                mode="markers",
+                                name=wrap_arithmetic_string(entry.attrs["long_name"]),
+                            ),
+                            secondary_y=secondary_y,
+                        )
+                        # Add left y axis label
+                        if y_axis_index == 1:
+                            fig.update_yaxes(
+                                title_text=entry.attrs["long_name"], secondary_y=False
+                            )
+                        # Add right y axis label
+                        elif y_axis_index == 2:
+                            fig.update_yaxes(
+                                title_text=entry.attrs["long_name"], secondary_y=True
+                            )                            
+                if "fit" in plot_group:
+                    fit_group = plot_group["fit"]
+                    for fit_entry in fit_group.values():
+                        plot_metadata = json.loads(
+                            fit_entry.attrs.get("plot_metadata", "{}")
+                        )
+                        # Get the type of fit
+                        if plot_metadata["use_custom_func"]:
+                            func = plot_metadata["custom_func"]
+                            model = lmfit.models.ExpressionModel(func)
+                        else:
+                            func = plot_metadata["predef_func"]
+                            model = lmfit.models.lmfit_models[func]()
+                        # Create the params of the model
+                        params = model.make_params()
+                        # Set the parameters from the fit entry
+                        for param in params:
+                            params[param].set(value=fit_entry[param][0])
+                        y_fit_data = model.eval(params=params, x=x_data)
+                        y_axis_index = fit_entry.attrs["y_axes_index"]
+                        if y_axis_index == 1:
+                            secondary_y = False
+                        else:
+                            secondary_y = True
+                        fig.add_trace(
+                            go.Scatter(
+                                x=x_data,
+                                y=y_fit_data,
+                                mode="lines",
+                                name=wrap_arithmetic_string("Fit" + plot_metadata["y"]),
+                                line=dict(dash="dash"),
+                            ),
+                            secondary_y=secondary_y,
+                        )
+
+            elif "_plot_data_axes_0" in plot_group:  # This is a 2D plot
+                x_data = plot_group["_plot_data_axes_0"][()]
+                y_data = plot_group["_plot_data_axes_1"][()]
+                z_data = plot_group["_plot_data_signal"][()]
+                fig = go.Figure(
+                    data=go.Heatmap(
+                        x=x_data,
+                        y=y_data,
+                        z=z_data,
+                        colorscale="Viridis",
+                        colorbar=dict(
+                            title=plot_group["_plot_data_signal"].attrs["long_name"]
+                        ),
+                        showscale=True,
+                    )
+                )
+                # Add x and y axes labels
+                fig.update_layout(
+                    title=f"2D Plot from {plot_path}",
+                    xaxis_title=plot_group["_plot_data_axes_0"].attrs["long_name"],
+                    yaxis_title=plot_group["_plot_data_axes_1"].attrs["long_name"],
+                )
+            # Set small text fonts as the labels can be long
+            fig.update_layout(
+                font=dict(size=9),  # affects all text elements by default
+                title_font=dict(size=9),
+            )
+            figures[plot_path] = fig
+    return figures
+
+
+def find_plot_paths(filepath, key=""):
+    """
+    Walks an entire HDF5 file and returns a list of full paths
+    to entries that are of class 'NXdata' and whose names
+    start with 'plot_'.
+
+    Args:
+        filepath (str): The path to the HDF5 file.
+
+    Returns:
+        list: A list of full string paths to matching entries.
+    """
+    found_paths = []
+
+    def check_node(name, obj):
+        """
+        This is a callback function called by visititems for every object.
+        'name' is the full path, 'obj' is the HDF5 object (Group or Dataset).
+        """
+
+        # 1. Check the name criteria
+        # We get the base name (the last part of the path)
+        basename = name.split("/")[-1]
+
+        if basename.startswith("plot_"):
+            # 2. Check the class criteria
+            # NeXus classes are stored in an attribute named 'NX_class'
+            if "NX_class" in obj.attrs:
+                # Read the attribute
+                nx_class = obj.attrs["NX_class"]
+
+                # Attributes can be stored as bytes, so we decode if necessary
+                if isinstance(nx_class, bytes):
+                    nx_class = nx_class.decode("utf-8")
+
+                if nx_class == "NXdata":
+                    # If both criteria match, add the full path to our list
+                    found_paths.append(obj.name)
+
+    # --- Main execution ---
+    try:
+        with h5py.File(filepath, "r") as f:
+            # .visititems() recursively visits every item in the file
+            # and calls 'check_node' for each one.
+            f[key].visititems(check_node)
+
+    except FileNotFoundError:
+        print(f"Error: File not found at '{filepath}'", file=sys.stderr)
+    except OSError as e:
+        print(
+            f"Error: Could not read file. Is it a valid HDF5 file? \n{e}",
+            file=sys.stderr,
+        )
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}", file=sys.stderr)
+
+    return found_paths
 
 
 def recreate_plots(
@@ -343,3 +729,10 @@ def _make_single_fit(func, y, x, stream, params, model, df, fit_data, y_axis, fi
             f'Could not plot the fit {func} for {y} vs {x} in the stream "{stream}".\n'
             f"Please check the fit parameters and the data.\n{e}"
         )
+
+
+if __name__ == "__main__":
+    xy = recreate_plots_v2(
+        r"C:\Users\yh43epyd\Documents\NOMAD_CAMELS_data\Jon_Doe\Si_Diode\test_it_copy_60.h5",
+        show_figures=True,
+    )
