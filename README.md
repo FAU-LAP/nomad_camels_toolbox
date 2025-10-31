@@ -21,10 +21,16 @@ Single installation options can be installed by using `pip install nomad-camels-
 
 # Changelog
 
+### 0.4.1
+Fixes:
+- fixed broken import of the modules methods
+
 ### 0.4.0
 - Can now recreate plots from CAMELS files using suitcase-nomad-camels-hdf5 version > 1.0.0
 
    Fully supports complex nested protocols and multiple plots with fits. 
+
+   -- BROKEN -- use version 0.4.1
 
 ### 0.3.2
 - Display data as points and fits as dashed lines
