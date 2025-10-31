@@ -9,9 +9,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from packaging import version
 
-from data_reader import read_camels_file, decide_entry_key
-from utils.fit_variable_renaming import replace_name
-from utils.string_evaluation import evaluate_string
+from .data_reader import read_camels_file, decide_entry_key
+from .utils.fit_variable_renaming import replace_name
+from .utils.string_evaluation import evaluate_string
 
 
 def _wrap_recursive(node: ast.expr, source_str: str) -> str:
@@ -788,4 +788,3 @@ def _make_single_fit(func, y, x, stream, params, model, df, fit_data, y_axis, fi
             f'Could not plot the fit {func} for {y} vs {x} in the stream "{stream}".\n'
             f"Please check the fit parameters and the data.\n{e}"
         )
-        
