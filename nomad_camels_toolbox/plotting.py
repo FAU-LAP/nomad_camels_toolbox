@@ -193,7 +193,7 @@ def get_camels_suitcase_version(file_path):
     try:
         with h5py.File(file_path, "r") as f:
             for key in f:
-                if key.endswith("_entry"):
+                if key.startswith("CAMELS_"):
                     camels_group = f[key]
                     suitcase_version = camels_group[
                         "program/python_environment/suitcase-nomad-camels-hdf5"

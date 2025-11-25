@@ -21,6 +21,9 @@ Single installation options can be installed by using `pip install nomad-camels-
 
 # Changelog
 
+### 0.4.2
+- fixed broken check for the used camels-suitcase version. If a session name was given in CAMELS it would fail to recreate plots. 
+
 ### 0.4.1
 Fixes:
 - fixed broken import of the modules methods
